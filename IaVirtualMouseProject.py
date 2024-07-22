@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-import hand_tracking.HandTrackingModule as htm
-import autopy
+import HandTrackingModule as htm
+import pyautogui
 import tkinter as tk
 from tkinter import ttk
 
@@ -34,14 +34,14 @@ def start_hand_tracking():
 
             fingers = [1 if lmList[i][2] < lmList[i-2][2] else 0 for i in [8, 12, 16, 20]]
             
-            if fingers[0] == 1 and fingers[1] == 0:
-                x3 = np.interp(x1, (frameR, wCam-frameR), (0, autopy.screen.size()[0]))
-                y3 = np.interp(y1, (frameR, hCam-frameR), (0, autopy.screen.size()[1]))
+            if fingers[0] == 1 and fingers[1] == 0:  # Solo el dedo índice levantado
+                x3 = np.interp(x1, (frameR, wCam-frameR), (0, pyautogui.size().width))
+                y3 = np.interp(y1, (frameR, hCam-frameR), (0, pyautogui.size().height))
 
                 clocX = plocX + (x3 - plocX) / smoothening
                 clocY = plocY + (y3 - plocY) / smoothening
 
-                autopy.mouse.move(clocX, clocY)
+                pyautogui.moveTo(clocX, clocY)
                 cv2.circle(img, (x1, y1), 15, (255, 0, 255), cv2.FILLED)
                 plocX, plocY = clocX, clocY
 
