@@ -1,78 +1,84 @@
 import cv2
 import numpy as np
-import HandTrackingModule as htm
-import time
-import pyautogui
+import hand_tracking.HandTrackingModule as htm
+import autopy
+import tkinter as tk
+from tkinter import ttk
 
-##########################
+# Variables globales que se pueden modificar
 wCam, hCam = 640, 480
-frameR = 100 # Frame Reduction
+frameR = 100  # Frame Reduction
 smoothening = 7
-#########################
 
-pTime = 0
-plocX, plocY = 0, 0
-clocX, clocY = 0, 0
+# Función para iniciar el seguimiento de manos
+def start_hand_tracking():
+    global wCam, hCam, frameR, smoothening
 
-cap = cv2.VideoCapture(0)
-cap.set(3, wCam)
-cap.set(4, hCam)
-detector = htm.handDetector(maxHands=1)
-wScr, hScr = pyautogui.size()
-# print(wScr, hScr)
+    cap = cv2.VideoCapture(0)
+    cap.set(3, wCam)
+    cap.set(4, hCam)
 
-while True:
-    # 1. Find hand Landmarks
-    success, img = cap.read()
-    if not success:
-        print("Failed to capture image")
-        continue
+    detector = htm.HandDetector(maxHands=1)
 
-    img = detector.findHands(img)
-    lmList, bbox = detector.findPosition(img)
-    # 2. Get the tip of the index and middle fingers
-    if len(lmList) != 0:
-        x1, y1 = lmList[8][1:]
-        x2, y2 = lmList[12][1:]
-        # print(x1, y1, x2, y2)
-   
-    # 3. Check which fingers are up
-    if len(lmList) >= 21:  # Asegurarse de que hay al menos 21 puntos de referencia
-        fingers = detector.fingersUp()
-        # print(fingers)
-        cv2.rectangle(img, (frameR, frameR), (wCam - frameR, hCam - frameR),
-                      (255, 0, 255), 2)
-        # 4. Only Index Finger : Moving Mode
-        if fingers[1] == 1 and fingers[2] == 0:
-            # 5. Convert Coordinates
-            x3 = np.interp(x1, (frameR, wCam - frameR), (0, wScr))
-            y3 = np.interp(y1, (frameR, hCam - frameR), (0, hScr))
-            # 6. Smoothen Values
-            clocX = plocX + (x3 - plocX) / smoothening
-            clocY = plocY + (y3 - plocY) / smoothening
-   
-            # 7. Move Mouse
-            pyautogui.moveTo(wScr - clocX, clocY)
-            cv2.circle(img, (x1, y1), 15, (255, 0, 255), cv2.FILLED)
-            plocX, plocY = clocX, clocY
-       
-        # 8. Both Index and middle fingers are up : Clicking Mode
-        if fingers[1] == 1 and fingers[2] == 1:
-            # 9. Find distance between fingers
-            length, img, lineInfo = detector.findDistance(8, 12, img)
-            print(length)
-            # 10. Click mouse if distance short
-            if length < 40:
-                cv2.circle(img, (lineInfo[4], lineInfo[5]),
-                           15, (0, 255, 0), cv2.FILLED)
-                pyautogui.click()
-   
-    # 11. Frame Rate
-    cTime = time.time()
-    fps = 1 / (cTime - pTime)
-    pTime = cTime
-    cv2.putText(img, str(int(fps)), (20, 50), cv2.FONT_HERSHEY_PLAIN, 3,
-                (255, 0, 0), 3)
-    # 12. Display
-    cv2.imshow("Image", img)
-    cv2.waitKey(1)
+    plocX, plocY = 0, 0
+    clocX, clocY = 0, 0
+
+    while True:
+        success, img = cap.read()
+        img = detector.findHands(img)
+        lmList = detector.findPosition(img, draw=False)
+
+        if len(lmList) != 0:
+            x1, y1 = lmList[8][1:]
+            x2, y2 = lmList[12][1:]
+
+            fingers = [1 if lmList[i][2] < lmList[i-2][2] else 0 for i in [8, 12, 16, 20]]
+            
+            if fingers[0] == 1 and fingers[1] == 0:
+                x3 = np.interp(x1, (frameR, wCam-frameR), (0, autopy.screen.size()[0]))
+                y3 = np.interp(y1, (frameR, hCam-frameR), (0, autopy.screen.size()[1]))
+
+                clocX = plocX + (x3 - plocX) / smoothening
+                clocY = plocY + (y3 - plocY) / smoothening
+
+                autopy.mouse.move(clocX, clocY)
+                cv2.circle(img, (x1, y1), 15, (255, 0, 255), cv2.FILLED)
+                plocX, plocY = clocX, clocY
+
+        cv2.imshow("Image", img)
+        cv2.waitKey(1)
+
+# Función para mostrar la ventana de configuración
+def show_config_window():
+    def apply_changes():
+        global wCam, hCam, frameR, smoothening
+        wCam = int(wCam_var.get())
+        hCam = int(hCam_var.get())
+        frameR = int(frameR_var.get())
+        smoothening = int(smoothening_var.get())
+        root.destroy()
+        start_hand_tracking()
+
+    root = tk.Tk()
+    root.title("Configuración de Parámetros")
+
+    ttk.Label(root, text="Resolución de Cámara").grid(column=0, row=0, padx=10, pady=10)
+    wCam_var = tk.IntVar(value=wCam)
+    hCam_var = tk.IntVar(value=hCam)
+    ttk.Entry(root, textvariable=wCam_var).grid(column=1, row=0, padx=10, pady=10)
+    ttk.Entry(root, textvariable=hCam_var).grid(column=2, row=0, padx=10, pady=10)
+
+    ttk.Label(root, text="Reducción del Marco").grid(column=0, row=1, padx=10, pady=10)
+    frameR_var = tk.IntVar(value=frameR)
+    ttk.Entry(root, textvariable=frameR_var).grid(column=1, row=1, padx=10, pady=10)
+
+    ttk.Label(root, text="Suavizado").grid(column=0, row=2, padx=10, pady=10)
+    smoothening_var = tk.IntVar(value=smoothening)
+    ttk.Entry(root, textvariable=smoothening_var).grid(column=1, row=2, padx=10, pady=10)
+
+    ttk.Button(root, text="Aplicar", command=apply_changes).grid(column=0, row=3, padx=10, pady=10, columnspan=3)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    show_config_window()
